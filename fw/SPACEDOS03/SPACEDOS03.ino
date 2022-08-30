@@ -1,8 +1,8 @@
 //#define DEBUG // Please comment it if you are not debugging
-String githash = "f157c1d";
+String FWtype = "SPACEDOS03";
 String FWversion = "S03"; // 1 MHz internal oscillator
-#define MAXFILESIZE 122000000 // in bytes, 4 MB per day, 122 MB per month
-#define MAXCOUNT 225000 // in measurement cycles, 7 479 per day, 224 369 per month
+#define MAXFILESIZE 28000000 // in bytes, 4 MB per day, 28 MB per week, 122 MB per month
+#define MAXCOUNT 53000 // in measurement cycles, 7 479 per day, 52353 per week, 224 369 per month
 #define MAXFILES 100 // maximal number of files on SD card
 #define ZERO 256  // 5th channel is channel 1 (column 10 from 0, ussually DCoffset or DCoffset+1)
 
@@ -270,7 +270,7 @@ void setup()
   Serial.println("#Hmmm...");
 
   // make a string for device identification output
-  String dataString = "$AIRDOS," + FWversion + "," + String(ZERO) + "," + githash + ","; // FW version and Git hash
+  String dataString = "$DOS," + FWtype + "," + FWversion + "," + String(ZERO) + ","; // FW version and Git hash
   
   Wire.beginTransmission(0x58);                   // request SN from EEPROM
   Wire.write((int)0x08); // MSB
