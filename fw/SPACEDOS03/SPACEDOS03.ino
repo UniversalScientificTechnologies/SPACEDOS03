@@ -1,7 +1,10 @@
 //#define DEBUG // Please comment it if you are not debugging
 String githash = "f157c1d";
 String FWversion = "S03"; // 1 MHz internal oscillator
-#define ZERO 257  // 5th channel is channel 1 (column 10 from 0, ussually DCoffset or DCoffset+1)
+#define MAXFILESIZE 122000000 // in bytes, 4 MB per day, 122 MB per month
+#define MAXCOUNT 225000 // in measurement cycles, 7 479 per day, 224 369 per month
+#define MAXFILES 100 // maximal number of files on SD card
+#define ZERO 256  // 5th channel is channel 1 (column 10 from 0, ussually DCoffset or DCoffset+1)
 
 /*
   SPACEDOS03 derived from AIRDOS-F for USTSIPIN02A
@@ -89,13 +92,14 @@ boolean SDClass::begin(uint32_t clock, uint8_t csPin) {
 
 #define CHANNELS 512 // number of channels in buffer for histogram, including negative numbers
 
+String filename = "";
+uint16_t fn;
 uint16_t count = 0;
 uint32_t serialhash = 0;
 uint16_t offset;
 uint16_t base_offset = ZERO - 1;
 uint8_t lo, hi;
 uint16_t u_sensor, maximum;
-struct RTCx::tm tm;
 
 // Read Analog Differential without gain (read datashet of ATMega1280 and ATMega2560 for refference)
 // Use analogReadDiff(NUM)
@@ -119,9 +123,64 @@ struct RTCx::tm tm;
 #define PIN 0
 uint8_t analog_reference = INTERNAL2V56; // DEFAULT, INTERNAL, INTERNAL1V1, INTERNAL2V56, or EXTERNAL
 
+uint32_t tm;
+uint8_t tm_s100;
+
+uint8_t bcdToDec(uint8_t b)
+{
+  return ( ((b >> 4)*10) + (b%16) );
+}
+
+void readRTC()
+{
+  Wire.beginTransmission(0x51);
+  Wire.write(0);
+  Wire.endTransmission();
+  
+  Wire.requestFrom(0x51, 6);
+  tm_s100 = bcdToDec(Wire.read());
+  uint8_t tm_sec = bcdToDec(Wire.read() & 0x7f);
+  uint8_t tm_min = bcdToDec(Wire.read() & 0x7f);
+  tm = bcdToDec(Wire.read());
+  tm += bcdToDec(Wire.read()) * 100;
+  tm += bcdToDec(Wire.read()) * 10000;
+  tm = tm * 60 * 60 + tm_min * 60 + tm_sec;
+}
+
+void(* resetFunc) (void) = 0;//declare reset function at address 0
+
 void setup()
 {
-
+  // Initiation of RTC
+  Wire.beginTransmission(0x51); // init clock
+  Wire.write((uint8_t)0x23); // Start register
+  Wire.write((uint8_t)0x00); // 0x23
+  Wire.write((uint8_t)0x00); // 0x24 Two's complement offset value
+  Wire.write((uint8_t)0b00000101); // 0x25 Normal offset correction, disable low-jitter mode, set load caps to 6 pF
+  Wire.write((uint8_t)0x00); // 0x26 Battery switch reg, same as after a reset
+  Wire.write((uint8_t)0x00); // 0x27 Enable CLK pin, using bits set in reg 0x28
+  Wire.write((uint8_t)0x97); // 0x28 stop watch mode, no periodic interrupts, CLK pin off
+  Wire.write((uint8_t)0x00); // 0x29
+  Wire.write((uint8_t)0x00); // 0x2a
+  Wire.endTransmission();
+  Wire.beginTransmission(0x51); // reset clock
+  Wire.write(0x2f); 
+  Wire.write(0x2c);
+  Wire.endTransmission();
+  Wire.beginTransmission(0x51); // start stop-watch
+  Wire.write(0x28); 
+  Wire.write(0x97);
+  Wire.endTransmission();
+  Wire.beginTransmission(0x51); // reset stop-watch
+  Wire.write((uint8_t)0x00); // Start register
+  Wire.write((uint8_t)0x00); // 0x00
+  Wire.write((uint8_t)0x00); // 0x01 
+  Wire.write((uint8_t)0x00); // 0x02 
+  Wire.write((uint8_t)0x00); // 0x03
+  Wire.write((uint8_t)0x00); // 0x04
+  Wire.write((uint8_t)0x00); // 0x05
+  Wire.endTransmission();
+  
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
 
@@ -162,11 +221,11 @@ void setup()
   
   //!!! Wire.setClock(100000);
 
-  for(int i=0; i<5; i++)  
+  for(int i=0; i<3; i++)  
   {
     delay(50);
     digitalWrite(LED, HIGH);  // Blink for Dasa 
-    delay(50);
+    delay(10);
     digitalWrite(LED, LOW);  
   }
 
@@ -238,10 +297,26 @@ void setup()
       // don't do anything more:
       return;
     }
-  
+    
+    for (fn = 1; fn<MAXFILES; fn++) // find last file
+    {
+       filename = String(fn) + ".txt";
+       if (SD.exists(filename) == 0) break;
+    }
+    fn--;
+    filename = String(fn) + ".txt";
+    
     // open the file. note that only one file can be open at a time,
     // so you have to close this one before opening another.
-    File dataFile = SD.open("datalog.txt", FILE_WRITE);
+    File dataFile = SD.open(filename, FILE_WRITE);
+
+    if (dataFile.size() > MAXFILESIZE)
+    {
+      dataFile.close();
+      fn++;
+      filename = String(fn) + ".txt";      
+      dataFile = SD.open(filename, FILE_WRITE);
+    }
   
     // if the file is available, write to it:
     if (dataFile) 
@@ -249,9 +324,7 @@ void setup()
       dataFile.println(dataString);  // write to SDcard (800 ms)     
       dataFile.close();
   
-      digitalWrite(LED, HIGH);  // Blink for Dasa
       Serial.println(dataString);  // print SN to terminal 
-      digitalWrite(LED, LOW);          
     }  
     // if the file isn't open, pop up an error:
     else 
@@ -261,11 +334,7 @@ void setup()
   
     DDRB = 0b10011110;
     PORTB = 0b00000001;  // SDcard Power OFF          
-  }    
-
-  // Initiates RTC
-  rtc.autoprobe();
-  rtc.resetClock();
+  }  
 }
 
 
@@ -325,6 +394,8 @@ void loop()
   DDRB = 0b10011110;
   sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
   
+  readRTC(); // Start of integration
+
   // dosimeter integration
   for (uint16_t i=0; i<46000; i++)    // cca 10 s
   {
@@ -373,8 +444,17 @@ void loop()
   
   // Data out
   {
-    rtc.readClock(tm);
-    RTCx::time_t t = RTCx::mktime(&tm);
+    // make a string for assembling the data to log:
+    String dataString = "";
+    dataString += "$TIME,";
+    dataString += String(count); 
+    dataString += ",";  
+    dataString += String(tm); 
+    dataString += ".";
+    dataString += String(tm_s100); 
+    dataString += "\r\n"; 
+
+    readRTC();
 
     uint16_t noise = base_offset+4;
     uint32_t dose=0;
@@ -385,14 +465,14 @@ void loop()
       dose += histogram[n]; 
     }
 
-    // make a string for assembling the data to log:
-    String dataString = "";
     
     // make a string for assembling the data to log:
-    dataString += "$CANDY,";
+    dataString += "$HIST,";
     dataString += String(count); 
     dataString += ",";  
-    dataString += String(t-946684800); 
+    dataString += String(tm); 
+    dataString += ".";
+    dataString += String(tm_s100); 
     dataString += ",";
     dataString += String(suppress);
     dataString += ",";
@@ -423,7 +503,7 @@ void loop()
 
       // open the file. note that only one file can be open at a time,
       // so you have to close this one before opening another.
-      File dataFile = SD.open("datalog.txt", FILE_WRITE);
+      File dataFile = SD.open(filename, FILE_WRITE);
     
       // if the file is available, write to it:
       if (dataFile) 
@@ -448,6 +528,9 @@ void loop()
       digitalWrite(LED, HIGH);  // Blink for Dasa
       delay(10);     
       digitalWrite(LED, LOW);          
+
+      if (count > MAXCOUNT) resetFunc(); //call reset 
+
     }          
   }    
 }
