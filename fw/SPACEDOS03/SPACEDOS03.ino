@@ -73,6 +73,7 @@ boolean SDClass::begin(uint32_t clock, uint8_t csPin) {
 #include "wiring_private.h"
 #include <Wire.h>           
 #include "src/RTCx/RTCx.h"  // Modified version included
+#include "githash.h"
 
 #define LED         23   // PC7
 #define RESET       0    // PB0
@@ -270,7 +271,7 @@ void setup()
   Serial.println("#Hmmm...");
 
   // make a string for device identification output
-  String dataString = "$DOS," + FWtype + "," + FWversion + "," + String(ZERO) + ","; // FW version and Git hash
+  String dataString = "$DOS," + FWtype + "," + FWversion + "," + githash + "," + String(ZERO) + ","; // FW version and Git hash
   
   Wire.beginTransmission(0x58);                   // request SN from EEPROM
   Wire.write((int)0x08); // MSB
