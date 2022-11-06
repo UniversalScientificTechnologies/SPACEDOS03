@@ -1,6 +1,6 @@
-//#define DEBUG // Please comment it if you are not debugging
-String FWtype = "SPACEDOS03";
-String FWversion = "S03"; // 1 MHz internal oscillator
+#define DEBUG // Please comment it if you are not debugging
+String HWtype = "SPACEDOS03";
+String FWversion = "S04"; // 1 MHz internal oscillator / 250 kHz during integration 
 #define MAXFILESIZE 28000000 // in bytes, 4 MB per day, 28 MB per week, 122 MB per month
 #define MAXCOUNT 53000 // in measurement cycles, 7 479 per day, 52353 per week, 224 369 per month
 #define MAXFILES 100 // maximal number of files on SD card
@@ -72,7 +72,6 @@ boolean SDClass::begin(uint32_t clock, uint8_t csPin) {
 #include <SD.h>             // Revised version from MightyCore
 #include "wiring_private.h"
 #include <Wire.h>           
-#include "src/RTCx/RTCx.h"  // Modified version included
 
 #define LED         23   // PC7
 #define RESET       0    // PB0
@@ -101,7 +100,7 @@ uint16_t base_offset = ZERO - 1;
 uint8_t lo, hi;
 uint16_t u_sensor, maximum;
 
-// Read Analog Differential without gain (read datashet of ATMega1280 and ATMega2560 for refference)
+// Read Analog Differential without gain (read datashet of ATMega1280 for refference)
 // Use analogReadDiff(NUM)
 //   NUM  | POS PIN             | NEG PIN           |   GAIN
 //  0 | A0      | A1      | 1x
@@ -122,6 +121,7 @@ uint16_t u_sensor, maximum;
 //  15  | A15     | A9      | 1x
 #define PIN 0
 uint8_t analog_reference = INTERNAL2V56; // DEFAULT, INTERNAL, INTERNAL1V1, INTERNAL2V56, or EXTERNAL
+# the differential channels should not be used with an AREF < 2V
 
 uint32_t tm;
 uint8_t tm_s100;
@@ -183,7 +183,6 @@ void setup()
   
   // Open serial communications and wait for port to open:
   Serial.begin(9600);
-
   Serial.println("#Cvak...");
   
   ADMUX = (analog_reference << 6) | ((PIN | 0x10) & 0x1F);
@@ -212,7 +211,8 @@ void setup()
   PORTA = 0b00000000;  // SDcard Power OFF
   DDRC = 0b11101100;
   PORTC = 0b00000000;  // SDcard Power OFF
-  DDRD = 0b11111100;
+  //DDRD = 0b11111100;
+  DDRD = 0b11111111;
   PORTD = 0b10000000;  // SDcard Power OFF
 
   pinMode(LED, OUTPUT);
@@ -270,7 +270,7 @@ void setup()
   Serial.println("#Hmmm...");
 
   // make a string for device identification output
-  String dataString = "$DOS," + FWtype + "," + FWversion + "," + String(ZERO) + ","; // FW version and Git hash
+  String dataString = "$DOS," + HWtype + "," + FWversion + "," + String(ZERO) + ","; // FW version and Git hash
   
   Wire.beginTransmission(0x58);                   // request SN from EEPROM
   Wire.write((int)0x08); // MSB
@@ -335,8 +335,19 @@ void setup()
     DDRB = 0b10011110;
     PORTB = 0b00000001;  // SDcard Power OFF          
   }  
+  disablePower(POWER_TIMER1);
+  disablePower(POWER_TIMER2);
+  disablePower(POWER_TIMER3);
+#ifdef DEBUG
+#else
+  delay(100);
+  Serial.end();
+  disablePower(POWER_SERIAL0);
+#endif
+  disablePower(POWER_SERIAL1);
 }
 
+bool everithingOK = false;
 
 void loop()
 {
@@ -394,26 +405,28 @@ void loop()
   DDRB = 0b10011110;
   sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
   
-  readRTC(); // Start of integration
-
+  cbi(ADCSRA, 2);           // 0x010 = clock 250 kHz divided by 4, 62.5 kHz, 224 us for 14 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
+  sbi(ADCSRA, 1);        
+  cbi(ADCSRA, 0);        
+  clock_prescale_set(clock_div_32); // CPU clock 250 kHz
+  if (everithingOK)
+  {
+    digitalWrite(LED, HIGH);  // Blink for Lembit
+    delay(2);     
+    digitalWrite(LED, LOW);  
+    everithingOK = false;        
+  }
   // dosimeter integration
-  for (uint16_t i=0; i<46000; i++)    // cca 10 s
+  for (uint16_t i=0; i<30000; i++)    // cca 15 s
   {
     while (bit_is_clear(ADCSRA, ADIF)); // wait for end of conversion 
-    //delayMicroseconds(24);            // 24 us wait for 1.5 cycle of 62.5 kHz ADC clock for sample/hold for next conversion
+    //delayMicroseconds();              // 24 us wait for 1.5 cycle of 62.5 kHz ADC clock for sample/hold for next conversion
     asm("NOP");                         // cca 8 us after loop
-    asm("NOP");                         
-    asm("NOP");                         
-    asm("NOP");                         
-    asm("NOP");                         
     asm("NOP");                         
     
     DDRB = 0b10011111;                  // Reset peak detector
     asm("NOP");                         // cca 7 us for 2k2 resistor and 100n capacitor in peak detector
-    asm("NOP");                         
-    asm("NOP");                         
-    asm("NOP");                         
-    asm("NOP");                         
+    asm("NOP");                         // 4 us for one NOP with 250 kHz CPU clock
     DDRB = 0b10011110;
     sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
 
@@ -441,18 +454,12 @@ void loop()
       maximum = 0;
     }
   }  
+  clock_prescale_set(clock_div_8); // CPU clock 1 MHz
   
   // Data out
   {
     // make a string for assembling the data to log:
     String dataString = "";
-    dataString += "$TIME,";
-    dataString += String(count); 
-    dataString += ",";  
-    dataString += String(tm); 
-    dataString += ".";
-    dataString += String(tm_s100); 
-    dataString += "\r\n"; 
 
     readRTC();
 
@@ -496,7 +503,7 @@ void loop()
       // see if the card is present and can be initialized:
       if (!SD.begin(SS)) 
       {
-        Serial.println("#Card failed, or not present");
+        //Serial.println("#Card failed, or not present");
         // don't do anything more:
         return;
       }
@@ -508,26 +515,18 @@ void loop()
       // if the file is available, write to it:
       if (dataFile) 
       {
-        dataFile.println(dataString);  // write to SDcard (800 ms)     
+        dataFile.println(dataString);  // write to SDcard (800 ms) 
         dataFile.close();
+        everithingOK = true;
       }  
-      // if the file isn't open, pop up an error:
-      else 
-      {
-        Serial.println("#error opening datalog.txt");
-      }
 
       DDRB = 0b10011110;
       PORTB = 0b00000001;  // SDcard Power OFF
 
 #ifdef DEBUG
-#else
-      dataString.remove(75); 
-#endif
       Serial.println(dataString);  // print to terminal (additional 700 ms in DEBUG mode)
-      digitalWrite(LED, HIGH);  // Blink for Dasa
-      delay(10);     
-      digitalWrite(LED, LOW);          
+      delay(100);
+#endif
 
       if (count > MAXCOUNT) resetFunc(); //call reset 
 
