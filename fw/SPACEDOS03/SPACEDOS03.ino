@@ -1,4 +1,6 @@
 #define DEBUG // Please comment it if you are not debugging
+// Compiled with: Arduino 1.8.13
+// MightyCore 2.0.3
 String HWtype = "SPACEDOS03";
 String FWversion = "S04"; // 1 MHz internal oscillator / 250 kHz during integration 
 #define MAXFILESIZE 28000000 // in bytes, 4 MB per day, 28 MB per week, 122 MB per month
@@ -9,7 +11,7 @@ String FWversion = "S04"; // 1 MHz internal oscillator / 250 kHz during integrat
 /*
   SPACEDOS03 derived from AIRDOS-F for USTSIPIN02A
  
-6 month endurance with 2x LS 33600
+6 month endurance with 5x LG 18650
 
 ISP
 ---
@@ -32,7 +34,7 @@ RESET  0   PB0
 
 LED
 ---
-LED_yellow  23  PC7         // LED for Dasa
+LED_green  23  PC7      
 
 
                      Mighty 1284p    
@@ -60,16 +62,7 @@ TX1/INT1 (D 11) PD3 17|        |24 PC2 (D 18) TCK
                       +--------+
 */
 
-/*
-// Compiled with: Arduino 1.8.9
-// MightyCore 2.0.2 https://mcudude.github.io/MightyCore/package_MCUdude_MightyCore_index.json
-Fix old bug in Mighty SD library
-~/.arduino15/packages/MightyCore/hardware/avr/2.0.2/libraries/SD/src/SD.cpp:
-boolean SDClass::begin(uint32_t clock, uint8_t csPin) {
-  if(root.isOpen()) root.close();
-*/
-
-#include <SD.h>             // Revised version from MightyCore
+#include <SD.h>         
 #include "wiring_private.h"
 #include <Wire.h>           
 
@@ -88,7 +81,6 @@ boolean SDClass::begin(uint32_t clock, uint8_t csPin) {
 #define LED2        22   // PC6
 #define LED3        23   // PC7
 
-
 #define CHANNELS 512 // number of channels in buffer for histogram, including negative numbers
 
 String filename = "";
@@ -98,7 +90,7 @@ uint32_t serialhash = 0;
 uint16_t offset;
 uint16_t base_offset = ZERO - 1;
 uint8_t lo, hi;
-uint16_t u_sensor, maximum;
+uint16_t u_sensor;
 
 // Read Analog Differential without gain (read datashet of ATMega1280 for refference)
 // Use analogReadDiff(NUM)
@@ -121,7 +113,7 @@ uint16_t u_sensor, maximum;
 //  15  | A15     | A9      | 1x
 #define PIN 0
 uint8_t analog_reference = INTERNAL2V56; // DEFAULT, INTERNAL, INTERNAL1V1, INTERNAL2V56, or EXTERNAL
-# the differential channels should not be used with an AREF < 2V
+// the differential channels should not be used with an AREF < 2V
 
 uint32_t tm;
 uint8_t tm_s100;
@@ -147,7 +139,7 @@ void readRTC()
   tm = tm * 60 * 60 + tm_min * 60 + tm_sec;
 }
 
-void(* resetFunc) (void) = 0;//declare reset function at address 0
+void(* resetFunc) (void) = 0; //declare reset function at address 0
 
 void setup()
 {
@@ -181,7 +173,7 @@ void setup()
   Wire.write((uint8_t)0x00); // 0x05
   Wire.endTransmission();
   
-  // Open serial communications and wait for port to open:
+  // Open serial communications 
   Serial.begin(9600);
   Serial.println("#Cvak...");
   
@@ -224,7 +216,7 @@ void setup()
   for(int i=0; i<3; i++)  
   {
     delay(50);
-    digitalWrite(LED, HIGH);  // Blink for Dasa 
+    digitalWrite(LED, HIGH);  // Blink indicating inserting batteryes
     delay(10);
     digitalWrite(LED, LOW);  
   }
@@ -405,21 +397,31 @@ void loop()
   DDRB = 0b10011110;
   sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
   
+#ifdef DEBUG
+  readRTC();
+  Serial.print("ADCstart ");
+  Serial.print(tm); 
+  Serial.print(".");
+  Serial.println(tm_s100); 
+#endif
+  
   cbi(ADCSRA, 2);           // 0x010 = clock 250 kHz divided by 4, 62.5 kHz, 224 us for 14 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
-  sbi(ADCSRA, 1);        
-  cbi(ADCSRA, 0);        
+  sbi(ADCSRA, 1);           // 4.5 kS/s 
+  cbi(ADCSRA, 0);           // successive approximation circuitry requires an input clock frequency between 50 kHz and 200 kHz
   clock_prescale_set(clock_div_32); // CPU clock 250 kHz
   if (everithingOK)
   {
-    digitalWrite(LED, HIGH);  // Blink for Lembit
+    digitalWrite(LED, HIGH);  // Blink on Lembit's demand
     delay(2);     
     digitalWrite(LED, LOW);  
     everithingOK = false;        
   }
   // dosimeter integration
-  for (uint16_t i=0; i<30000; i++)    // cca 15 s
+  for (uint16_t i=0; i<65535; i++)    // 14.67984 s
   {
+    bool missed_pulse = false;
     while (bit_is_clear(ADCSRA, ADIF)); // wait for end of conversion 
+    if (bit_is_set(PORTB, 0)) missed_pulse = true; // before the pulse peak?
     //delayMicroseconds();              // 24 us wait for 1.5 cycle of 62.5 kHz ADC clock for sample/hold for next conversion
     asm("NOP");                         // cca 8 us after loop
     asm("NOP");                         
@@ -443,29 +445,27 @@ void loop()
     // manage negative values
     if (u_sensor <= (CHANNELS/2)-1 ) {u_sensor += (CHANNELS/2);} else {u_sensor -= (CHANNELS/2);}
               
-    if (u_sensor > maximum) // filter double detection for pulses between two samples
+    if (missed_pulse) 
     {
-      maximum = u_sensor;
       suppress++;
     }
     else
     {
-      histogram[maximum]++;
-      maximum = 0;
+      histogram[u_sensor]++;
     }
   }  
   clock_prescale_set(clock_div_8); // CPU clock 1 MHz
   
   // Data out
   {
+    readRTC();
+
     // make a string for assembling the data to log:
     String dataString = "";
 
-    readRTC();
-
     uint16_t noise = base_offset+4;
     uint32_t dose=0;
-    #define RANGE 252
+    #define RANGE 250
 
     for(int n=noise; n<(base_offset+RANGE); n++)  
     {
@@ -512,6 +512,14 @@ void loop()
       // so you have to close this one before opening another.
       File dataFile = SD.open(filename, FILE_WRITE);
     
+#ifdef DEBUG
+      readRTC();
+      Serial.print("SDwrite ");
+      Serial.print(tm); 
+      Serial.print(".");
+      Serial.println(tm_s100); 
+#endif
+
       // if the file is available, write to it:
       if (dataFile) 
       {
@@ -519,6 +527,14 @@ void loop()
         dataFile.close();
         everithingOK = true;
       }  
+
+#ifdef DEBUG
+      readRTC();
+      Serial.print("SDwrite ");
+      Serial.print(tm); 
+      Serial.print(".");
+      Serial.println(tm_s100); 
+#endif
 
       DDRB = 0b10011110;
       PORTB = 0b00000001;  // SDcard Power OFF
