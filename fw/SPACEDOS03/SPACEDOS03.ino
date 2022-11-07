@@ -64,7 +64,7 @@ TX1/INT1 (D 11) PD3 17|        |24 PC2 (D 18) TCK
 
 #include <SD.h>         
 #include "wiring_private.h"
-#include <Wire.h>           
+#include <Wire.h>   
 
 #define LED         23   // PC7
 #define RESET       0    // PB0
@@ -87,7 +87,6 @@ String filename = "";
 uint16_t fn;
 uint16_t count = 0;
 uint32_t serialhash = 0;
-uint16_t offset;
 uint16_t base_offset = ZERO - 1;
 uint8_t lo, hi;
 uint16_t u_sensor;
@@ -143,6 +142,37 @@ void(* resetFunc) (void) = 0; //declare reset function at address 0
 
 void setup()
 {
+  // Open serial communications 
+  Serial.begin(9600);
+  Serial.println("#Cvak...");
+  
+  ADMUX = (analog_reference << 6) | ((PIN | 0x10) & 0x1F);
+  
+  ADCSRB = 0;               // Switching ADC to Free Running mode
+  sbi(ADCSRA, ADATE);       // ADC autotrigger enable (mandatory for free running mode)
+  sbi(ADCSRA, ADSC);        // ADC start the first conversions
+  sbi(ADCSRA, 2);           // 0x100 = clock divided by 16, 62.5 kHz, 208 us for 13 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
+  cbi(ADCSRA, 1);        
+  cbi(ADCSRA, 0);        
+
+  //pinMode(SDpower1, OUTPUT);  // SDcard interface
+  //pinMode(SDpower2, OUTPUT);     
+  //pinMode(SDpower3, OUTPUT);     
+  //pinMode(SS, OUTPUT);     
+  //pinMode(MOSI, INPUT);     
+  //pinMode(MISO, INPUT);     
+  //pinMode(SCK, OUTPUT);  
+
+  DDRB = 0b10011110;
+  PORTB = 0b00000000;  // SDcard Power OFF
+  DDRA = 0b11111100;
+  PORTA = 0b00000000;  
+  DDRC = 0b11101100;
+  PORTC = 0b00000000;  
+  DDRD = 0b11111111;
+  PORTD = 0b10000000;  
+  
+  //!!! Wire.setClock(100000);
   // Initiation of RTC
   Wire.beginTransmission(0x51); // init clock
   Wire.write((uint8_t)0x23); // Start register
@@ -173,46 +203,6 @@ void setup()
   Wire.write((uint8_t)0x00); // 0x05
   Wire.endTransmission();
   
-  // Open serial communications 
-  Serial.begin(9600);
-  Serial.println("#Cvak...");
-  
-  ADMUX = (analog_reference << 6) | ((PIN | 0x10) & 0x1F);
-  
-  ADCSRB = 0;               // Switching ADC to Free Running mode
-  sbi(ADCSRA, ADATE);       // ADC autotrigger enable (mandatory for free running mode)
-  sbi(ADCSRA, ADSC);        // ADC start the first conversions
-  sbi(ADCSRA, 2);           // 0x100 = clock divided by 16, 62.5 kHz, 208 us for 13 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
-  cbi(ADCSRA, 1);        
-  cbi(ADCSRA, 0);        
-
-  pinMode(RESET, OUTPUT);   // reset for peak detetor
-
-  //pinMode(SDpower1, OUTPUT);  // SDcard interface
-  //pinMode(SDpower2, OUTPUT);     
-  //pinMode(SDpower3, OUTPUT);     
-  //pinMode(SS, OUTPUT);     
-  //pinMode(MOSI, INPUT);     
-  //pinMode(MISO, INPUT);     
-  //pinMode(SCK, OUTPUT);  
-
-  DDRB = 0b10011110;
-  PORTB = 0b00000000;  // SDcard Power OFF
-
-  DDRA = 0b11111100;
-  PORTA = 0b00000000;  // SDcard Power OFF
-  DDRC = 0b11101100;
-  PORTC = 0b00000000;  // SDcard Power OFF
-  //DDRD = 0b11111100;
-  DDRD = 0b11111111;
-  PORTD = 0b10000000;  // SDcard Power OFF
-
-  pinMode(LED, OUTPUT);
-  digitalWrite(LED, LOW);  
-  digitalWrite(RESET, LOW);  
-  
-  //!!! Wire.setClock(100000);
-
   for(int i=0; i<3; i++)  
   {
     delay(50);
@@ -348,54 +338,13 @@ void loop()
   {
     histogram[n]=0;
   }
-
-  // measurement of ADC offset
-  ADMUX = (analog_reference << 6) | 0b10001; // Select +A1,-A1 for offset correction
-  delay(50);
-  ADCSRB = 0;               // Switching ADC to Free Running mode
-  sbi(ADCSRA, ADATE);       // ADC autotrigger enable (mandatory for free running mode)
-  sbi(ADCSRA, ADSC);        // ADC start the first conversions
-  sbi(ADCSRA, 2);           // 0x100 = clock divided by 16, 62.5 kHz, 208 us for 13 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
-  cbi(ADCSRA, 1);        
-  cbi(ADCSRA, 0);        
-  sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
-  while (bit_is_clear(ADCSRA, ADIF)); // wait for the first conversion 
-  sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
-  lo = ADCL;
-  hi = ADCH;
-  ADMUX = (analog_reference << 6) | 0b10000; // Select +A0,-A1 for measurement
-  ADCSRB = 0;               // Switching ADC to Free Running mode
-  sbi(ADCSRA, ADATE);       // ADC autotrigger enable (mandatory for free running mode)
-  sbi(ADCSRA, ADSC);        // ADC start the first conversions
-  sbi(ADCSRA, 2);           // 0x100 = clock divided by 16, 62.5 kHz, 208 us for 13 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
-  cbi(ADCSRA, 1);        
-  cbi(ADCSRA, 0);        
-  // combine the two bytes
-  u_sensor = (hi << 7) | (lo >> 1);
-  // manage negative values
-  if (u_sensor <= (CHANNELS/2)-1 ) {u_sensor += (CHANNELS/2);} else {u_sensor -= (CHANNELS/2);}
-  offset = u_sensor;
   
-  PORTB = 1;                          // Set reset output for peak detector to H
   sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
-  while (bit_is_clear(ADCSRA, ADIF)); // wait for the first dummy conversion 
   DDRB = 0b10011111;                  // Reset peak detector
   delayMicroseconds(100);             // guaranteed reset
-  DDRB = 0b10011110;
-
-  sbi(ADCSRA, ADIF);        // reset interrupt flag from ADC
+  DDRB = 0b10011110;                  // Peak detector to input
 
   uint16_t suppress = 0;      
-    
-  while (bit_is_clear(ADCSRA, ADIF)); // wait for dummy conversion 
-  DDRB = 0b10011111;                  // Reset peak detector
-  asm("NOP");                         // cca 6 us for 2k2 resistor and 1k capacitor in peak detector
-  asm("NOP");                         
-  asm("NOP");                         
-  asm("NOP");                         
-  asm("NOP");                         
-  DDRB = 0b10011110;
-  sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
   
 #ifdef DEBUG
   readRTC();
@@ -403,12 +352,15 @@ void loop()
   Serial.print(tm); 
   Serial.print(".");
   Serial.println(tm_s100); 
+  delay(100);
 #endif
   
-  cbi(ADCSRA, 2);           // 0x010 = clock 250 kHz divided by 4, 62.5 kHz, 224 us for 14 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
-  sbi(ADCSRA, 1);           // 4.5 kS/s 
-  cbi(ADCSRA, 0);           // successive approximation circuitry requires an input clock frequency between 50 kHz and 200 kHz
-  clock_prescale_set(clock_div_32); // CPU clock 250 kHz
+  cbi(ADCSRA, 2); // 0x010 = clock 250 kHz divided by 4, 62.5 kHz, 224 us for 14 cycles of one AD conversion
+  sbi(ADCSRA, 1); // 4.5 kS/s, 24 us fo 1.5 cycle for sample-hold
+//!!!!
+  sbi(ADCSRA, 0); // successive approximation circuitry requires an input clock frequency between 50 kHz and 200 kHz
+//  clock_prescale_set(clock_div_32); // CPU clock 250 kHz
+  clock_prescale_set(clock_div_16); // CPU clock 250 kHz
   if (everithingOK)
   {
     digitalWrite(LED, HIGH);  // Blink on Lembit's demand
@@ -417,20 +369,29 @@ void loop()
     everithingOK = false;        
   }
   // dosimeter integration
-  for (uint16_t i=0; i<65535; i++)    // 14.67984 s
+  noInterrupts();
+  uint8_t previous_pulse = 1; // ignore the first ADC
+  for (uint16_t i=65535; i>0; i--)    // 14.67984 s
   {
-    bool missed_pulse = false;
     while (bit_is_clear(ADCSRA, ADIF)); // wait for end of conversion 
-    if (bit_is_set(PORTB, 0)) missed_pulse = true; // before the pulse peak?
+//DDRB = 0b10011111;                  // Reset peak detector
+//DDRB = 0b10011110;
+    uint8_t missed_pulse = PINB; // pulse peak before S/H?
     //delayMicroseconds();              // 24 us wait for 1.5 cycle of 62.5 kHz ADC clock for sample/hold for next conversion
-    asm("NOP");                         // cca 8 us after loop
-    asm("NOP");                         
+    sbi(ADCSRA, ADIF);                  // reset ADC interrupt flag
+    asm("NOP");                                    // cca 30 us after conversion
+    asm("NOP");
+    asm("NOP");
+    asm("NOP");
+    asm("NOP");
+    asm("NOP");
+    asm("NOP");
     
     DDRB = 0b10011111;                  // Reset peak detector
-    asm("NOP");                         // cca 7 us for 2k2 resistor and 100n capacitor in peak detector
-    asm("NOP");                         // 4 us for one NOP with 250 kHz CPU clock
+    asm("NOP");                         // cca 7 us is neaded for 2k2 resistor and 100n capacitor in peak detector
+    asm("NOP"); // 4 us for one NOP with 250 kHz CPU clock
+    asm("NOP");
     DDRB = 0b10011110;
-    sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
 
     // we have to read ADCL first; doing so locks both ADCL
     // and ADCH until ADCH is read.  reading ADCL second would
@@ -444,8 +405,8 @@ void loop()
 
     // manage negative values
     if (u_sensor <= (CHANNELS/2)-1 ) {u_sensor += (CHANNELS/2);} else {u_sensor -= (CHANNELS/2);}
-              
-    if (missed_pulse) 
+            
+    if (previous_pulse & 1) 
     {
       suppress++;
     }
@@ -453,9 +414,13 @@ void loop()
     {
       histogram[u_sensor]++;
     }
+
+    histogram[u_sensor]++;
+    previous_pulse = missed_pulse;
   }  
   clock_prescale_set(clock_div_8); // CPU clock 1 MHz
-  
+  interrupts();
+   
   // Data out
   {
     readRTC();
@@ -463,15 +428,7 @@ void loop()
     // make a string for assembling the data to log:
     String dataString = "";
 
-    uint16_t noise = base_offset+4;
-    uint32_t dose=0;
     #define RANGE 250
-
-    for(int n=noise; n<(base_offset+RANGE); n++)  
-    {
-      dose += histogram[n]; 
-    }
-
     
     // make a string for assembling the data to log:
     dataString += "$HIST,";
@@ -482,10 +439,6 @@ void loop()
     dataString += String(tm_s100); 
     dataString += ",";
     dataString += String(suppress);
-    dataString += ",";
-    dataString += String(dose);
-    dataString += ",";
-    dataString += String(offset);
     
     for(int n=base_offset-1; n<(base_offset-1+RANGE); n++)  
     {
@@ -499,19 +452,6 @@ void loop()
       DDRB = 0b10111110;
       PORTB = 0b00001111;  // SDcard Power ON
 
-      // make sure that the default chip select pin is set to output
-      // see if the card is present and can be initialized:
-      if (!SD.begin(SS)) 
-      {
-        //Serial.println("#Card failed, or not present");
-        // don't do anything more:
-        return;
-      }
-
-      // open the file. note that only one file can be open at a time,
-      // so you have to close this one before opening another.
-      File dataFile = SD.open(filename, FILE_WRITE);
-    
 #ifdef DEBUG
       readRTC();
       Serial.print("SDwrite ");
@@ -520,6 +460,19 @@ void loop()
       Serial.println(tm_s100); 
 #endif
 
+      // make sure that the default chip select pin is set to output
+      // see if the card is present and can be initialized:
+      if (!SD.begin(SS)) 
+      {
+        //Serial.println("#Card failed, or not present");
+        // don't do anything more:
+        resetFunc();
+      }
+
+      // open the file. note that only one file can be open at a time,
+      // so you have to close this one before opening another.
+      File dataFile = SD.open(filename, FILE_WRITE);
+    
       // if the file is available, write to it:
       if (dataFile) 
       {
@@ -527,6 +480,10 @@ void loop()
         dataFile.close();
         everithingOK = true;
       }  
+      else
+      {
+        resetFunc();
+      }
 
 #ifdef DEBUG
       readRTC();
@@ -545,7 +502,6 @@ void loop()
 #endif
 
       if (count > MAXCOUNT) resetFunc(); //call reset 
-
     }          
   }    
 }
