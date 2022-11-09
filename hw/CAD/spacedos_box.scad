@@ -172,9 +172,32 @@ plate_x= 50.4;//box_in_x+2*box_cor;//
 k_z=3-2;
 k_v_z=5;//2;
 
+//stinitko = stinici filtr (69x115x5)
+stinitko_x = 69;
+stinitko_y = 115;
+stinitko_z = 5;
+
+//stinitko tloustka uchyceni
+stinitko_thick_z = 1.5;
+stinitko_rezerva = 0.2;
+
+//stinitko delka v uchaceni
+stinitko_le_x = 10;
+
+//baterie
+baterie_x = 78.4;
+baterie_y = 100.10;
+baterie_z = 23.12+0.5;
+
+//baterie spodni podlozeni
+baterie_podl_distance= 55.5;
+baterie_podl_x= 3.6;
+
+//dratek
+dratek=4.6;
 
 
-vicko = 0; // zobrazit krabicku nebo vicko
+vicko = 1; // zobrazit krabicku nebo vicko
 
 difference(){
     cube([box_out_x, box_out_y, box_out_z]);
@@ -184,11 +207,40 @@ difference(){
         for(i=[box_nut_d_x, box_nut_d_x_2], j=[box_nut_d_z, box_nut_d_z_2])
         translate([i, 0, j]) translate([0, -box_nut_in_repair, 0])
             rotate([-90, 90,0]) cylinder(h=box_out_y+repair,d=box_nut_h+2*repair_s, $fn=100);
-    }
+        
+        //stinitko upevneni
+        translate([thickness/2,thickness-box_cor,box_cor_d_z-stinitko_z-2*stinitko_thick_z]) cube([box_out_x, stinitko_y, stinitko_z+2*stinitko_thick_z]);
+        
+        //baterie
+        translate([thickness/2, thickness, box_cor_d_z-stinitko_z-2*stinitko_thick_z-baterie_z]) cube([box_out_x, baterie_y, baterie_z]);
+        
+        //baterie spodni podlozeni
+        for(i=[-baterie_podl_distance/2, baterie_podl_distance/2])translate([thickness+box_in_x/2-baterie_podl_x/2+i,thickness,0]) cube([baterie_podl_x,87,10+thickness]);
+            
+    
+        }
    
     //insertion
     translate([box_cor_d_xy-toleration/2, box_cor_d_xy, box_cor_d_z])cube([box_in_x+2*box_cor-toleration, box_in_y+box_cor+repair_s, desk_z+repair_s]);
     
+    //stinitko
+    translate([-stinitko_x/2+box_out_x/2-stinitko_rezerva,thickness-box_cor-stinitko_rezerva,box_cor_d_z-stinitko_z-stinitko_thick_z-stinitko_rezerva]) cube([stinitko_x+2*stinitko_rezerva, stinitko_y+2*stinitko_rezerva, stinitko_z+2*stinitko_rezerva]);
+    
+    //stinitko zbaveni desek okolo
+    translate([(-stinitko_x+2*stinitko_le_x+box_out_x)/2, thickness-box_cor,box_cor_d_z-stinitko_z-2*stinitko_thick_z])cube([stinitko_x-2*stinitko_le_x, stinitko_y, stinitko_z+2*(stinitko_thick_z)]);
+     
+    translate([(-stinitko_x+2*(stinitko_le_x-7)+box_out_x)/2, thickness-box_cor,box_cor_d_z-stinitko_z-2*stinitko_thick_z+stinitko_thick_z])cube([stinitko_x-2*(stinitko_le_x-7), stinitko_y, stinitko_z+2*(stinitko_thick_z)]);
+    
+//baterie
+    translate([(-baterie_x+box_out_x)/2, thickness, box_cor_d_z-stinitko_z-2*stinitko_thick_z-baterie_z]) cube([baterie_x, baterie_y, baterie_z]);
+    
+    translate([55, 90, box_cor_d_z-stinitko_z-2*stinitko_thick_z-baterie_z-8]) cube([15, 25, 15]);
+    
+    //translate([thickness,thickness, box_cor_d_z-stinitko_z-2*stinitko_thick_z-baterie_z/2-baterie_z/4]) cube([box_in_x, baterie_y, baterie_z/2]);
+        
+    //dratek
+        translate([box_out_x-thickness-dratek, box_out_y-thickness-dratek,box_cor_d_z-stinitko_z-2*stinitko_thick_z]) cube([dratek, dratek, stinitko_z+2*stinitko_thick_z]);    
+        
     //screw
     for(i=[box_nut_d_x, box_nut_d_x_2], j=[box_nut_d_z, box_nut_d_z_2]){
         translate([i, box_nut_d_y, j]) 
@@ -229,7 +281,7 @@ difference(){
     translate([vulcan_trans_x, vulcan_trans_y, vulcan_trans_z]) cylinder(h=vulcan_height, d1=vulcan_diameter_1_in, d2=vulcan_diameter_2_in, $fn=100);
     
     //battery
-    translate([bat_x_trans, bat_y_trans, bat_z_trans]) cube([bat_x, bat_y, bat_z]);
+    //translate([bat_x_trans, bat_y_trans, bat_z_trans]) cube([bat_x, bat_y, bat_z]);
  
     
     //vyrez pro diodu
@@ -252,6 +304,7 @@ if(vicko){
     //vystuha horni
     translate([v_h_x_trans, v_h_y_trans, v_h_z_trans]) cube([v_h_x, v_h_y,v_h_z]);
 
+/*
     //vystuha bocni
     difference(){
         translate([v_b_x_trans, v_b_y_trans, v_b_z_trans]) 
@@ -259,7 +312,7 @@ if(vicko){
         translate([v_v_b_x_trans, v_v_b_y_trans, v_v_b_z_trans]) 
             translate([0,0,0]) cube([v_v_b_x, v_v_b_y, v_v_b_z]);  
             
-        }
+        } */
  }
 /*        
 //vulcan
@@ -276,11 +329,15 @@ if(!vicko){
 translate([v_o_v_x_trans, v_o_v_y_trans, v_o_v_z_trans]) cube([v_o_v_x, v_o_v_y, v_o_v_z]); 
 
 //bocni vnitrni opora vicka +x
-translate([b_o_x_x_trans, b_o_x_y_trans, b_o_x_z_trans]) cube([b_o_x_x, b_o_x_y, b_o_x_z]);
+//translate([b_o_x_x_trans, b_o_x_y_trans, b_o_x_z_trans]) cube([b_o_x_x, b_o_x_y, b_o_x_z]);
 
 //bocni vnitrni opora vicka -x
-translate([b_o__x_x_trans, b_o__x_y_trans, b_o__x_z_trans]) cube([b_o__x_x, b_o__x_y, b_o__x_z]);
+//translate([b_o__x_x_trans, b_o__x_y_trans, b_o__x_z_trans]) cube([b_o__x_x, b_o__x_y, b_o__x_z]);
 
 //vnitrni dolni opora vicka
 translate([v_d_v_x_trans, v_d_v_y_trans, v_d_v_z_trans]) cube([v_d_v_x, v_d_v_y, v_d_v_z]); 
+
+//baterie upevneni 
+    translate([thickness+box_in_x/2, thickness+baterie_y,box_cor_d_z-stinitko_z-2*stinitko_thick_z-baterie_z]) cube([thickness, box_in_y+box_cor-baterie_y, thickness]);
+       
 }
