@@ -1,17 +1,19 @@
-#define DEBUG // Please comment it if you are not debugging
+//#define DEBUG // Please comment it if you are not debugging
 // Compiled with: Arduino 1.8.13
 // MightyCore 2.0.3
 String HWtype = "SPACEDOS03";
-String FWversion = "S04"; // 1 MHz internal oscillator / 250 kHz during integration 
-#define MAXFILESIZE 28000000 // in bytes, 4 MB per day, 28 MB per week, 122 MB per month
-#define MAXCOUNT 53000 // in measurement cycles, 7 479 per day, 52353 per week, 224 369 per month
-#define MAXFILES 100 // maximal number of files on SD card
+String FWversion = "S04"; // 1 MHz internal oscillator / 500 kHz during integration 
+#define MAXFILESIZE MAX_MEASUREMENTS * BYTES_MEASUREMENT // in bytes, 4 MB per day, 28 MB per week, 122 MB per month
+#define MAX_MEASUREMENTS 5500ul // in measurement cycles, 5 500 per day
+#define BYTES_MEASUREMENT 531ul // number of bytes per one measurement
+#define MAXFILES 200 // maximal number of files on SD card
 #define ZERO 256  // 5th channel is channel 1 (column 10 from 0, ussually DCoffset or DCoffset+1)
 
 /*
   SPACEDOS03 derived from AIRDOS-F for USTSIPIN02A
  
 6 month endurance with 5x LG 18650
+https://batterybro.com/blogs/18650-wholesale-battery-reviews/40773059-new-lg-mj1-18650-battery-review-3500mah
 
 ISP
 ---
@@ -85,7 +87,8 @@ TX1/INT1 (D 11) PD3 17|        |24 PC2 (D 18) TCK
 
 String filename = "";
 uint16_t fn;
-uint16_t count = 0;
+uint32_t count = 0;
+uint32_t rest_measurements;
 uint32_t serialhash = 0;
 uint16_t base_offset = ZERO - 1;
 uint8_t lo, hi;
@@ -115,7 +118,6 @@ uint8_t analog_reference = INTERNAL2V56; // DEFAULT, INTERNAL, INTERNAL1V1, INTE
 // the differential channels should not be used with an AREF < 2V
 
 uint32_t tm;
-uint8_t tm_s100;
 
 uint8_t bcdToDec(uint8_t b)
 {
@@ -129,7 +131,8 @@ void readRTC()
   Wire.endTransmission();
   
   Wire.requestFrom(0x51, 6);
-  tm_s100 = bcdToDec(Wire.read());
+  Wire.read();
+  //tm_s100 = bcdToDec(Wire.read());
   uint8_t tm_sec = bcdToDec(Wire.read() & 0x7f);
   uint8_t tm_min = bcdToDec(Wire.read() & 0x7f);
   tm = bcdToDec(Wire.read());
@@ -143,7 +146,16 @@ void(* resetFunc) (void) = 0; //declare reset function at address 0
 void setup()
 {
   // Open serial communications 
+  enablePower(POWER_SERIAL0);
+  interrupts();
   Serial.begin(9600);
+  for(int i=0; i<3; i++)  
+  {
+    delay(300);
+    digitalWrite(LED, HIGH);  // Blink indicating inserting batteryes (or reset)
+    delay(10);
+    digitalWrite(LED, LOW);  
+  }
   Serial.println("#Cvak...");
   
   ADMUX = (analog_reference << 6) | ((PIN | 0x10) & 0x1F);
@@ -169,11 +181,13 @@ void setup()
   PORTA = 0b00000000;  
   DDRC = 0b11101100;
   PORTC = 0b00000000;  
-  DDRD = 0b11111111;
-  PORTD = 0b10000000;  
+  DDRD = 0b11111111;  
+  PORTD = 0b10000000; // Analog Power ON 
   
+
   //!!! Wire.setClock(100000);
   // Initiation of RTC
+/*
   Wire.beginTransmission(0x51); // init clock
   Wire.write((uint8_t)0x23); // Start register
   Wire.write((uint8_t)0x00); // 0x23
@@ -202,40 +216,39 @@ void setup()
   Wire.write((uint8_t)0x00); // 0x04
   Wire.write((uint8_t)0x00); // 0x05
   Wire.endTransmission();
-  
-  for(int i=0; i<3; i++)  
-  {
-    delay(50);
-    digitalWrite(LED, HIGH);  // Blink indicating inserting batteryes
-    delay(10);
-    digitalWrite(LED, LOW);  
-  }
+*/
 
   {
+    // measurement of ADC offset
+    ADMUX = (analog_reference << 6) | 0b10001; // Select +A1,-A1 for offset correction
+    ADCSRB = 0;               // Switching ADC to Free Running mode
+    sbi(ADCSRA, ADATE);       // ADC autotrigger enable (mandatory for free running mode)
+    sbi(ADCSRA, ADSC);        // ADC start the first conversions
+    sbi(ADCSRA, 2);           // 0x100 = clock 1 MHz divided by 16, 62.5 kHz, 208 us for 13 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
+    cbi(ADCSRA, 1);
+    cbi(ADCSRA, 0);
+    sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
+    while (bit_is_clear(ADCSRA, ADIF)); // wait for the first conversion
+    sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
+    lo = ADCL;
+    hi = ADCH;
+    delayMicroseconds(16); // 24 us wait for 1.5 cycle of 62.5 kHz ADC clock for sample/hold for next conversion     
+    DDRB = 0b10011111;     // Reset peak detector
+    delayMicroseconds(7);  // cca 7 us is neaded for 2k2 resistor and 100n capacitor in peak detector              
+    DDRB = 0b10011110;
+
     uint16_t DCoffset;
     for (uint8_t n=0; n<8; n++) 
     { 
-      // measurement of ADC offset
-      ADMUX = (analog_reference << 6) | 0b10001; // Select +A1,-A1 for offset correction
-      delay(200);
-      ADCSRB = 0;               // Switching ADC to Free Running mode
-      sbi(ADCSRA, ADATE);       // ADC autotrigger enable (mandatory for free running mode)
-      sbi(ADCSRA, ADSC);        // ADC start the first conversions
-      sbi(ADCSRA, 2);           // 0x100 = clock divided by 16, 62.5 kHz, 208 us for 13 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
-      cbi(ADCSRA, 1);
-      cbi(ADCSRA, 0);
-      sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
       while (bit_is_clear(ADCSRA, ADIF)); // wait for the first conversion
       sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
       lo = ADCL;
       hi = ADCH;
-      ADMUX = (analog_reference << 6) | 0b10000; // Select +A0,-A1 for measurement
-      ADCSRB = 0;               // Switching ADC to Free Running mode
-      sbi(ADCSRA, ADATE);       // ADC autotrigger enable (mandatory for free running mode)
-      sbi(ADCSRA, ADSC);        // ADC start the first conversions
-      sbi(ADCSRA, 2);           // 0x100 = clock divided by 16, 62.5 kHz, 208 us for 13 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
-      cbi(ADCSRA, 1);
-      cbi(ADCSRA, 0);
+      delayMicroseconds(16); // 24 us wait for 1.5 cycle of 62.5 kHz ADC clock for sample/hold for next conversion     
+      DDRB = 0b10011111;     // Reset peak detector
+      delayMicroseconds(7);  // cca 7 us is neaded for 2k2 resistor and 100n capacitor in peak detector              
+      DDRB = 0b10011110;
+      
       // combine the two bytes
       u_sensor = (hi << 7) | (lo >> 1);
       // manage negative values
@@ -247,12 +260,22 @@ void setup()
       DCoffset += u_sensor;
     }
     base_offset = DCoffset >> 3; // Calculate mean of 8 measurements
+
+    ADMUX = (analog_reference << 6) | 0b10000; // Select +A0,-A1 for measurement
+    ADCSRB = 0;               // Switching ADC to Free Running mode
+    sbi(ADCSRA, ADATE);       // ADC autotrigger enable (mandatory for free running mode)
+    sbi(ADCSRA, ADSC);        // ADC start the first conversions
+    sbi(ADCSRA, 2);           // 0x100 = clock divided by 16, 62.5 kHz, 208 us for 13 cycles of one AD conversion, 24 us fo 1.5 cycle for sample-hold
+    cbi(ADCSRA, 1);
+    cbi(ADCSRA, 0);
+
   }
     
+  readRTC();
   Serial.println("#Hmmm...");
 
   // make a string for device identification output
-  String dataString = "$DOS," + HWtype + "," + FWversion + "," + String(ZERO) + ","; // FW version and Git hash
+  String dataString = "$DOS," + HWtype + "," + FWversion + "," + String(tm) + "," + String(base_offset) + ","; // log FW type and version 
   
   Wire.beginTransmission(0x58);                   // request SN from EEPROM
   Wire.write((int)0x08); // MSB
@@ -276,8 +299,14 @@ void setup()
     if (!SD.begin(SS)) 
     {
       Serial.println("#Card failed, or not present");
+      DDRB = 0b10011110;
+      PORTB = 0b00000001;  // SDcard Power OFF  
+      delay(100);
+      clock_prescale_set(clock_div_32); // CPU clock 250 kHz 
+      delay(4000);      // 16 s
+      clock_prescale_set(clock_div_8); // CPU clock 1 MHz 
       // don't do anything more:
-      return;
+      resetFunc();
     }
     
     for (fn = 1; fn<MAXFILES; fn++) // find last file
@@ -292,13 +321,27 @@ void setup()
     // so you have to close this one before opening another.
     File dataFile = SD.open(filename, FILE_WRITE);
 
-    if (dataFile.size() > MAXFILESIZE)
+    uint32_t filesize = dataFile.size();
+#ifdef DEBUG
+    Serial.print("Filesize ");
+    Serial.println(filesize); 
+#endif
+    if (filesize > MAXFILESIZE)
     {
       dataFile.close();
       fn++;
       filename = String(fn) + ".txt";      
+      rest_measurements = MAX_MEASUREMENTS;
       dataFile = SD.open(filename, FILE_WRITE);
     }
+    else
+    {
+      rest_measurements = MAX_MEASUREMENTS >> 1; // half measurements if file exists
+    }
+#ifdef DEBUG
+    Serial.print("Filename ");
+    Serial.println(filename); 
+#endif
   
     // if the file is available, write to it:
     if (dataFile) 
@@ -333,34 +376,21 @@ bool everithingOK = false;
 
 void loop()
 {
+#ifdef DEBUG
+  Serial.print("ADCstart ");
+  Serial.println(count); 
+  delay(100);
+#endif
+
+  PORTD = 0b10000000; // Analog Power ON 
+  delay(100);
+
   uint16_t histogram[CHANNELS];  
   for(int n=0; n<CHANNELS; n++)
   {
     histogram[n]=0;
   }
-  
-  sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
-  DDRB = 0b10011111;                  // Reset peak detector
-  delayMicroseconds(100);             // guaranteed reset
-  DDRB = 0b10011110;                  // Peak detector to input
-
-  uint16_t suppress = 0;      
-  
-#ifdef DEBUG
-  readRTC();
-  Serial.print("ADCstart ");
-  Serial.print(tm); 
-  Serial.print(".");
-  Serial.println(tm_s100); 
-  delay(100);
-#endif
-  
-  cbi(ADCSRA, 2); // 0x010 = clock 250 kHz divided by 4, 62.5 kHz, 224 us for 14 cycles of one AD conversion
-  sbi(ADCSRA, 1); // 4.5 kS/s, 24 us fo 1.5 cycle for sample-hold
-//!!!!
-  sbi(ADCSRA, 0); // successive approximation circuitry requires an input clock frequency between 50 kHz and 200 kHz
-//  clock_prescale_set(clock_div_32); // CPU clock 250 kHz
-  clock_prescale_set(clock_div_16); // CPU clock 250 kHz
+    
   if (everithingOK)
   {
     digitalWrite(LED, HIGH);  // Blink on Lembit's demand
@@ -369,14 +399,21 @@ void loop()
     everithingOK = false;        
   }
   // dosimeter integration
+  uint16_t suppress = 0;      
   noInterrupts();
+  cbi(ADCSRA, 2); // 0x011 = clock 500 kHz divided by 8, 62.5 kHz, 224 us for 14 cycles of one AD conversion
+  sbi(ADCSRA, 1); // 4.5 kS/s, 24 us fo 1.5 cycle for sample-hold
+  sbi(ADCSRA, 0); // successive approximation circuitry requires an input clock frequency between 50 kHz and 200 kHz
+  sbi(ADCSRA, ADIF);                  // reset interrupt flag from ADC
+  DDRB = 0b10011111;                  // Reset peak detector
+  delayMicroseconds(50);              // Guarantead reset
+  DDRB = 0b10011110;
+  clock_prescale_set(clock_div_16); // CPU clock 500 kHz
   uint8_t previous_pulse = 1; // ignore the first ADC
   for (uint16_t i=65535; i>0; i--)    // 14.67984 s
   {
     while (bit_is_clear(ADCSRA, ADIF)); // wait for end of conversion 
-//DDRB = 0b10011111;                  // Reset peak detector
-//DDRB = 0b10011110;
-    uint8_t missed_pulse = PINB; // pulse peak before S/H?
+    uint8_t missed_pulse = PINB; // peak of pulse was before S/H?
     //delayMicroseconds();              // 24 us wait for 1.5 cycle of 62.5 kHz ADC clock for sample/hold for next conversion
     sbi(ADCSRA, ADIF);                  // reset ADC interrupt flag
     asm("NOP");                                    // cca 30 us after conversion
@@ -389,7 +426,7 @@ void loop()
     
     DDRB = 0b10011111;                  // Reset peak detector
     asm("NOP");                         // cca 7 us is neaded for 2k2 resistor and 100n capacitor in peak detector
-    asm("NOP"); // 4 us for one NOP with 250 kHz CPU clock
+    asm("NOP"); // 2 us for one NOP with 500 kHz CPU clock
     asm("NOP");
     DDRB = 0b10011110;
 
@@ -415,11 +452,11 @@ void loop()
       histogram[u_sensor]++;
     }
 
-    histogram[u_sensor]++;
     previous_pulse = missed_pulse;
   }  
   clock_prescale_set(clock_div_8); // CPU clock 1 MHz
   interrupts();
+  PORTD = 0b00000000; // Analog Power OFF 
    
   // Data out
   {
@@ -436,8 +473,6 @@ void loop()
     dataString += ",";  
     dataString += String(tm); 
     dataString += ".";
-    dataString += String(tm_s100); 
-    dataString += ",";
     dataString += String(suppress);
     
     for(int n=base_offset-1; n<(base_offset-1+RANGE); n++)  
@@ -445,7 +480,7 @@ void loop()
       dataString += ",";
       dataString += String(histogram[n]); 
     }
-    
+
     count++;
 
     {
@@ -455,16 +490,13 @@ void loop()
 #ifdef DEBUG
       readRTC();
       Serial.print("SDwrite ");
-      Serial.print(tm); 
-      Serial.print(".");
-      Serial.println(tm_s100); 
+      Serial.println(tm); 
 #endif
 
       // make sure that the default chip select pin is set to output
       // see if the card is present and can be initialized:
       if (!SD.begin(SS)) 
       {
-        //Serial.println("#Card failed, or not present");
         // don't do anything more:
         resetFunc();
       }
@@ -488,9 +520,7 @@ void loop()
 #ifdef DEBUG
       readRTC();
       Serial.print("SDwrite ");
-      Serial.print(tm); 
-      Serial.print(".");
-      Serial.println(tm_s100); 
+      Serial.println(tm); 
 #endif
 
       DDRB = 0b10011110;
@@ -501,7 +531,15 @@ void loop()
       delay(100);
 #endif
 
-      if (count > MAXCOUNT) resetFunc(); //call reset 
+      if (count > MAX_MEASUREMENTS) 
+      {
+        count = 0;
+        fn++;
+        filename = String(fn) + ".txt";        
+#ifdef DEBUG
+      Serial.println(filename); 
+#endif
+      }
     }          
   }    
 }
