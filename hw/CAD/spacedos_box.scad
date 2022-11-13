@@ -186,7 +186,7 @@ stinitko_le_x = 10;
 
 //baterie
 baterie_x = 78.4;
-baterie_y = 100.10;
+baterie_y = 100.10+2.2;
 baterie_z = 23.12+0.5;
 
 //baterie spodni podlozeni
@@ -197,7 +197,7 @@ baterie_podl_x= 3.6;
 dratek=4.6;
 
 
-vicko = 1; // zobrazit krabicku nebo vicko
+vicko = 0; // zobrazit krabicku nebo vicko
 
 difference(){
     cube([box_out_x, box_out_y, box_out_z]);
@@ -338,6 +338,6 @@ translate([v_o_v_x_trans, v_o_v_y_trans, v_o_v_z_trans]) cube([v_o_v_x, v_o_v_y,
 translate([v_d_v_x_trans, v_d_v_y_trans, v_d_v_z_trans]) cube([v_d_v_x, v_d_v_y, v_d_v_z]); 
 
 //baterie upevneni 
-    translate([thickness+box_in_x/2, thickness+baterie_y,box_cor_d_z-stinitko_z-2*stinitko_thick_z-baterie_z]) cube([thickness, box_in_y+box_cor-baterie_y, thickness]);
+    translate([thickness*-1+box_in_x/2, thickness+baterie_y,box_cor_d_z-stinitko_z-2*stinitko_thick_z-baterie_z]) cube([thickness*3, box_in_y+box_cor-baterie_y, thickness]);
        
 }
