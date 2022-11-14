@@ -102,7 +102,8 @@ k_v_z=5;//2;
 
 //otvory pro krystaly
 o_k_height=0.8+0.5;
-o_k_diameter=4.7+0.75;
+o_k_diameter=4.7+0.75+((4.7+0.75)/2)*0.15425144988;
+echo("prumer chlivecku, k opsana", o_k_diameter);
 ///////////////?
 o_k_x_trans=k_x_trans+o_k_diameter;
 o_k_y_trans=k_y_trans+k_y/2+((k_y-20)/4)/4;
@@ -110,23 +111,31 @@ o_k_z_trans=k_z+k_z_trans-o_k_height;
 
 o_k_x_trans_posun=k_x;
 o_k_y_trans_posun=(k_y-20)/8;
+   
+//koeficient pro posunuta vzdalenosti der pro krystaly
+koeficient = 1.1;
 
 //otvory pro krystaly 2.rada
-o_k_x_2_trans=k_x_trans+k_x-2*o_k_diameter;
+o_k_x_2_trans=k_x_trans-o_k_diameter/2+k_x/2;//k_x_trans+k_x-2*o_k_diameter;
 o_k_y_2_trans=k_y_trans+k_y/2;
 
 //nut kvadr pro krystaly
 nut_zapusteni=3+repair_s;
 nut_zapusteni_trans_z=0;
 
-//
+//otvor pro krystal - cube
+o_k_c=11;
+o_k_c_height=1.5;
 
 vicko=0;
+//krystaly=1;
+//tld_box = 1;
 
 //plate
 difference(){
     translate([-3,0,0]) union(){
        
+        
         //vlozena deska
         //cube([plate_x, plate_y,plate_z+repair_s]);
        
@@ -136,9 +145,11 @@ difference(){
         //kvadr pro krystaly
         translate([k_x_trans, k_y_trans+k_y_zkrat, k_z_trans])
             cube([k_x, k_y-k_y_zkrat, k_z]);
+        echo([k_x, k_y-k_y_zkrat, k_z]);
+        
         
         //kvadr pro krystaly vicko
-        translate([k_x_trans, k_y_trans+k_y_zkrat, k_z_trans+k_z]) cube([k_x, k_y-k_y_zkrat, k_v_z]);
+        translate([k_x_trans, k_y_trans+k_y_zkrat, k_z_trans+k_z+0.5]) cube([k_x, k_y-k_y_zkrat, k_v_z]);
 
        if(!vicko)
         //nuts_horni, $fn=100
@@ -176,8 +187,8 @@ difference(){
     }
    translate([0,0,0]){ 
     //nut_spodni
-    if(!vicko){
-       for(i=[nut_d_x, nut_d_x_2 ], j=[nut_d_y, nut_d_y_2]){
+    if(0){
+       #for(i=[nut_d_x, nut_d_x_2 ], j=[nut_d_y, nut_d_y_2]){
         translate([i ,j, 1]) union(){
             cylinder(h=nut_height_1, d=nut_diameter, $fn=6);
             translate([0,0,-repair/2]) cylinder(h=box_nut_in_h, d=box_nut_in_d);
@@ -186,27 +197,40 @@ difference(){
     }
         
     //vycnelky_spodni
-    for(i=[cor_d_x, cor_d_x_2], j=[cor_d_y, cor_d_y_2]){
+    if(0) for(i=[cor_d_x, cor_d_x_2], j=[cor_d_y, cor_d_y_2]){
         translate([i, j, -repair_s])cylinder(h=cor_height, d=cor_diameter);
         }       
     }    
     
+    translate([-5, -5, -5]) cube(10);
     
-    translate([0,k_y/5,0]){
-    //otvory pro krystaly
-    #for(i=[(-1/2*(o_k_y_trans_posun)), 1/2 * (o_k_y_trans_posun), -3/2*(o_k_y_trans_posun), 3/2*(o_k_y_trans_posun)]){ translate([0,i,0]) translate([o_k_x_trans, o_k_y_trans, o_k_z_trans]) cylinder(h=o_k_height, d=o_k_diameter);
+    translate([-1.5, 0, 0]){
+    //otvor pro krystal - cube
+    translate([2+o_k_x_2_trans-o_k_diameter,o_k_y_2_trans-o_k_diameter/2+6.3*o_k_diameter-0.4,o_k_z_trans+o_k_height-o_k_c_height])cube([o_k_c, o_k_c, o_k_c_height]);
     
+    translate([1+0.5,k_y/5-0.4*o_k_diameter+0.3,0]){
+     //otvory pro krystaly 1.rada
+    for(i=[(-1/2*(o_k_y_trans_posun))*koeficient, 1/2 * (o_k_y_trans_posun)*koeficient, -(o_k_y_trans_posun)*koeficient, 0*(o_k_y_trans_posun*koeficient), o_k_y_trans_posun*koeficient]){
+        translate([0,i,0]) translate([-o_k_diameter+o_k_x_2_trans+1, o_k_y_2_trans, o_k_z_trans]) cylinder(h=o_k_height, d=o_k_diameter, $fn=6);
     }
     
     //otvory pro krystaly 2.rada
-    #for(i=[(-1/2*(o_k_y_trans_posun)), 1/2 * (o_k_y_trans_posun), -3/2*(o_k_y_trans_posun), 3/2*(o_k_y_trans_posun)]){ translate([0,i,0]) translate([o_k_x_2_trans, o_k_y_2_trans, o_k_z_trans]) cylinder(h=o_k_height, d=o_k_diameter);
+    for(i=[(-1/2*(o_k_y_trans_posun))*koeficient, 1/2 * (o_k_y_trans_posun)*koeficient, -(o_k_y_trans_posun)*koeficient, 0*(o_k_y_trans_posun)*koeficient, o_k_y_trans_posun*koeficient]){
+        translate([0,i,0]) translate([o_k_x_2_trans, o_k_y_2_trans-o_k_diameter/2, o_k_z_trans]) cylinder(h=o_k_height, d=o_k_diameter, $fn=6);
+    }
+     //otvory pro krystaly 3.rada
+    for(i=[(-1/2*(o_k_y_trans_posun))*koeficient, 1/2 * (o_k_y_trans_posun)*koeficient, -(o_k_y_trans_posun)*koeficient, 0*(o_k_y_trans_posun)*koeficient, o_k_y_trans_posun*koeficient]){
+        translate([0,i,0]) translate([o_k_diameter+o_k_x_2_trans-1, o_k_y_2_trans, o_k_z_trans]) cylinder(h=o_k_height, d=o_k_diameter, $fn=6);
+    }
     
     }
-    }
+}
+    
 
     //nut kvadr pro krystaly    
-    for(i=[nut_d+k_y_zkrat, k_y-nut_d/2-1]){
-        translate([k_x_trans+k_x/2-box_cor, i, -repair_s/7]){
+    for(i=[nut_d+k_y_zkrat, k_y-nut_d/2-2.3]){
+        echo("poloha sroubu", i);
+        translate([k_x_trans+k_x/2-box_cor, i+0.8, -repair_s/7]){
     translate([0,0,0]) rotate([0,0,30]) cylinder(h=nut_h+repair_s, d=nut_d, $fn=6);
         translate([0,0,-4*repair_s])cylinder(h=nut_height+repair,d=nut_d_in);
         translate([0,0,k_z_trans+k_z+repair_s/7+repair_s]) cylinder(h=nut_zapusteni, d=nut_d, $fn=100);
@@ -219,9 +243,6 @@ difference(){
    }else{
         translate([k_x_trans-repair_s*4+1, k_y_trans+k_y_zkrat-1, k_z_trans+k_z]) cube([desk_x+repair, desk_y+repair, desk_z+repair]);
    }
-   
-   
-    
 }
 
 
