@@ -4,7 +4,7 @@
 String HWtype = "SPACEDOS03";
 String FWversion = "S04"; // 1 MHz internal oscillator / 500 kHz during integration 
 #define MAXFILESIZE MAX_MEASUREMENTS * BYTES_MEASUREMENT // in bytes, 4 MB per day, 28 MB per week, 122 MB per month
-#define MAX_MEASUREMENTS 5500ul // in measurement cycles, 5 500 per day
+#define MAX_MEASUREMENTS 11000ul // in measurement cycles, 5 500 per day
 #define BYTES_MEASUREMENT 531ul // number of bytes per one measurement
 #define MAXFILES 200 // maximal number of files on SD card
 #define ZERO 256  // 5th channel is channel 1 (column 10 from 0, ussually DCoffset or DCoffset+1)
@@ -88,7 +88,6 @@ TX1/INT1 (D 11) PD3 17|        |24 PC2 (D 18) TCK
 String filename = "";
 uint16_t fn;
 uint32_t count = 0;
-uint32_t rest_measurements;
 uint32_t serialhash = 0;
 uint16_t base_offset = ZERO - 1;
 uint8_t lo, hi;
@@ -187,7 +186,6 @@ void setup()
 
   //!!! Wire.setClock(100000);
   // Initiation of RTC
-/*
   Wire.beginTransmission(0x51); // init clock
   Wire.write((uint8_t)0x23); // Start register
   Wire.write((uint8_t)0x00); // 0x23
@@ -199,6 +197,7 @@ void setup()
   Wire.write((uint8_t)0x00); // 0x29
   Wire.write((uint8_t)0x00); // 0x2a
   Wire.endTransmission();
+/*
   Wire.beginTransmission(0x51); // reset clock
   Wire.write(0x2f); 
   Wire.write(0x2c);
@@ -331,12 +330,7 @@ void setup()
       dataFile.close();
       fn++;
       filename = String(fn) + ".txt";      
-      rest_measurements = MAX_MEASUREMENTS;
       dataFile = SD.open(filename, FILE_WRITE);
-    }
-    else
-    {
-      rest_measurements = MAX_MEASUREMENTS >> 1; // half measurements if file exists
     }
 #ifdef DEBUG
     Serial.print("Filename ");
@@ -363,12 +357,6 @@ void setup()
   disablePower(POWER_TIMER1);
   disablePower(POWER_TIMER2);
   disablePower(POWER_TIMER3);
-#ifdef DEBUG
-#else
-  delay(100);
-  Serial.end();
-  disablePower(POWER_SERIAL0);
-#endif
   disablePower(POWER_SERIAL1);
 }
 
@@ -376,12 +364,6 @@ bool everithingOK = false;
 
 void loop()
 {
-#ifdef DEBUG
-  Serial.print("ADCstart ");
-  Serial.println(count); 
-  delay(100);
-#endif
-
   PORTD = 0b10000000; // Analog Power ON 
   delay(100);
 
@@ -394,7 +376,8 @@ void loop()
   if (everithingOK)
   {
     digitalWrite(LED, HIGH);  // Blink on Lembit's demand
-    delay(2);     
+    Serial.println(count); 
+    delay(10);     
     digitalWrite(LED, LOW);  
     everithingOK = false;        
   }
@@ -472,7 +455,7 @@ void loop()
     dataString += String(count); 
     dataString += ",";  
     dataString += String(tm); 
-    dataString += ".";
+    dataString += ",";
     dataString += String(suppress);
     
     for(int n=base_offset-1; n<(base_offset-1+RANGE); n++)  
