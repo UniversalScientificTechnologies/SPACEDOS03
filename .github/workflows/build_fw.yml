@@ -28,7 +28,7 @@ jobs:
           with:
             arduino-board-fqbn: MightyCore:avr:ATmega1284p
             platform-url: https://mcudude.github.io/MightyCore/package_MCUdude_MightyCore_index.json
-            platform-url: https://mcudude.github.io/MiniCore/package_MCUdude_MiniCore_index.json
+            platform-default-url:: https://mcudude.github.io/MiniCore/package_MCUdude_MiniCore_index.json
             required-libraries: Adafruit MPL3115A2 Library
             debug-install: True
             debug-compile: True
