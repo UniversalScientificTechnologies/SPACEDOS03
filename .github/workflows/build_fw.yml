@@ -29,7 +29,7 @@ jobs:
         - name: Compile all sources
           uses: ArminJo/arduino-test-compile@v3
           with:
-            arduino-board-fqbn: MightyCore:avr:1284
+            arduino-board-fqbn: MightyCore:avr:1284:Variant=1284p,Clock=Internal1MHz,BOD=BOD disabled,LTO=LTO disabled
             platform-url: https://mcudude.github.io/MiniCore/package_MCUdude_MiniCore_index.json https://mcudude.github.io/MightyCore/package_MCUdude_MightyCore_index.json
             #required-libraries: 
             debug-install: True
