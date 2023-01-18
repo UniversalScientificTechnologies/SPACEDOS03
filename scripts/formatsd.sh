@@ -1,7 +1,15 @@
 #!/bin/bash
-umount /dev/mmcblk0p1
-sudo badblocks -wsvt 0xff /dev/mmcblk0
-sudo badblocks -wsvt 0x00 /dev/mmcblk0
-sudo badblocks -wsvt 0xff /dev/mmcblk0
-sudo mkfs.vfat -F32 /dev/mmcblk0 -I -v
+
+if [ "$1" = "" ]
+then
+  echo "Usage: $0 <sd-card name>"
+  exit
+fi
+
+umount $1p1
+
+sudo badblocks -wsvt 0xff $1 
+sudo badblocks -wsvt 0x00 $1 
+sudo badblocks -wsvt 0xff $1 
+sudo mkfs.vfat -F32 $1 -I -v 
 
