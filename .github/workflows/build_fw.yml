@@ -22,6 +22,9 @@ jobs:
           run: |
             echo "// This file is overwritten by github actions, do not update it manually" > fw/SPACEDOS03/githash.h
             echo "String githash = "\""${{ github.sha }}"\"";" >> fw/SPACEDOS03/githash.h
+            
+            echo "// This file is overwritten by github actions, do not update it manually" > fw/SPACEDOS03_ISS/githash.h
+            echo "String githash = "\""${{ github.sha }}"\"";" >> fw/SPACEDOS03_ISS/githash.h
 
         - name: Compile all sources
           uses: ArminJo/arduino-test-compile@v3
