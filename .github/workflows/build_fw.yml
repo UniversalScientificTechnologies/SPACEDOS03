@@ -26,7 +26,7 @@ jobs:
         - name: Compile all sources
           uses: ArminJo/arduino-test-compile@v3
           with:
-            arduino-board-fqbn: MightyCore:avr:1284
+            arduino-board-fqbn: MightyCore:avr:ATmega1284p
             platform-url: https://mcudude.github.io/MightyCore/package_MCUdude_MightyCore_index.json
             required-libraries: Adafruit MPL3115A2 Library
 
