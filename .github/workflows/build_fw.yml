@@ -31,7 +31,7 @@ jobs:
           with:
             arduino-board-fqbn: MightyCore:avr:ATmega1284p
             platform-url: https://mcudude.github.io/MightyCore/package_MCUdude_MightyCore_index.json
-            required-libraries: MightyCore
+            #required-libraries: 
             debug-install: True
             debug-compile: True
 
