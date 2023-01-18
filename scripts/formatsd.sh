@@ -1,5 +1,7 @@
 #!/bin/bash
 
+start=$(date +%s)
+
 if [ "$1" = "" ]
 then
   echo "Usage: $0 <sd-card name>"
@@ -7,10 +9,15 @@ then
   exit
 fi
 
-umount $1p1
+umount $1
 
-sudo badblocks -wsvt 0xff $1 
-sudo badblocks -wsvt 0x00 $1 
-sudo badblocks -wsvt 0xff $1 
-sudo mkfs.vfat -F32 $1 -I -v 
+sudo badblocks -wsvt 0xff $1
+sudo badblocks -wsvt 0x00 $1
+sudo badblocks -wsvt 0xff $1
+sudo mkfs.vfat -F32 $1 -I -v
 
+
+
+end=$(date +%s)
+echo " "
+echo "Elapsed Time: $(($end-$start)) seconds"
