@@ -1,5 +1,8 @@
 # SPACEDOS03 - semiconductor-based ionizing radiation spectrometer
 
+[![Build firmware](https://github.com/UniversalScientificTechnologies/SPACEDOS03/actions/workflows/build_fw.yml/badge.svg)](https://github.com/UniversalScientificTechnologies/SPACEDOS03/actions/workflows/build_fw.yml)
+
+
 ![SPACEDOS03A front  panel](/doc/img/SPACEDOS03.jpg)
 
 
@@ -11,7 +14,7 @@ The detector is mounted into a 3D-printed box that contains positions for passiv
 
  * Silicon PIN diode detector with 12.5 mm³ detection volume
  * Effective number of energy channels 470 ±3
- * Deposited energy range from 60 keV to 7 MeV
+ * Deposited energy ranges from 60 keV to 7 MeV
  * Energy measurement resolution 15 ±2 keV (depending on calibration method and type of particles)
  * Power supply 18650 Li-ion cells
  * Integration time depends on firmware setup 
