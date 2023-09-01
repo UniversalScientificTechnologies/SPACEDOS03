@@ -12,7 +12,7 @@ The detector is mounted into a 3D-printed box that contains positions for passiv
 
 ## Parameters
 
- * Silicon PIN diode detector with 12.5 mm³ detection volume
+ * Silicon PIN diode detector with 44 mm³ detection volume
  * Effective number of energy channels 470 ±3
  * Deposited energy ranges from 60 keV to 7 MeV
  * Energy measurement resolution 15 ±2 keV (depending on calibration method and type of particles)
