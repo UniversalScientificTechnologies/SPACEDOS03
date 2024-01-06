@@ -2,8 +2,8 @@
 title: "Radiation shielding materials tester"
 excerpt: "SPACEDOS03 is a experimental dosimeter for testing of radiation shielding materials on board of manned spacecraft."
 header:
-  image: products/SPACEDOS03/doc/src/img/SPACEDOS03.jpg
-  teaser: products/SPACEDOS03/doc/src/img/SPACEDOS03.jpg
+  image: products/SPACEDOS03/doc/img/SPACEDOS03.jpg
+  teaser: products/SPACEDOS03/doc/img/SPACEDOS03.jpg
   overlay_color: "#000"
   overlay_filter: "0.5"
   overlay_image: products/SPACEDOS02A/doc/src/img/SPACEDOS02A_bottom.jpg
